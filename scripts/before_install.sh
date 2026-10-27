@@ -2,50 +2,34 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Update package lists and install required packages
+LOG_FILE="/tmp/before_install.log"
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+trap 'rc=$?; echo "ERROR: line ${BASH_LINENO[0]} failed (exit ${rc})"; exit "$rc"' ERR
+
+echo "===== BeforeInstall started: $(date -Is) ====="
+
+# Verify Ubuntu
+cat /etc/os-release
+
+# Install system prerequisites
+echo "Installing prerequisites..."
 sudo apt-get update
-sudo apt-get install -y \
-    ruby \
-    wget \
-    curl \
-    python3 \
-    python3-dev \
-    python3-pip \
-    python3-venv
+sudo apt-get install -y ruby wget curl python3 python3-pip python3-venv python3-dev
 
-# Navigate to the Ubuntu home directory
-cd /home/ubuntu
-
-# Remove previous CodeDeploy installer
-sudo rm -f /home/ubuntu/install
-
-# Download AWS CodeDeploy agent for ap-south-1
-wget -q \
-    https://aws-codedeploy-ap-south-1.s3.ap-south-1.amazonaws.com/latest/install \
-    -O /home/ubuntu/install
-
-chmod +x /home/ubuntu/install
-
-# Install CodeDeploy agent
-sudo /home/ubuntu/install auto
-
-# Enable and start CodeDeploy agent
-sudo systemctl enable codedeploy-agent
-sudo systemctl restart codedeploy-agent
-
-# Verify CodeDeploy agent status
-sudo systemctl --no-pager status codedeploy-agent
-
-# Upgrade pip for the Ubuntu user's Python environment
-sudo -u ubuntu python3 -m pip install --user --upgrade pip
-
-# Remove the old Django application directory if it exists
-if [ -d /home/ubuntu/django-aws_cicd ]; then
-    sudo rm -rf /home/ubuntu/django-aws_cicd
+# Install CodeDeploy agent if needed
+if ! command -v codedeploy-agent >/dev/null 2>&1; then
+    echo "Installing CodeDeploy agent..."
+    cd /tmp
+    wget -O install \
+      https://aws-codedeploy-ap-south-1.s3.ap-south-1.amazonaws.com/latest/install
+    chmod +x install
+    sudo ./install auto
 fi
 
-# Set ownership of the home directory
-sudo chown ubuntu:ubuntu /home/ubuntu
+# Start and verify the agent
+sudo systemctl enable codedeploy-agent
+sudo systemctl restart codedeploy-agent
+sudo systemctl is-active codedeploy-agent
 
-echo "CodeDeploy agent and Python prerequisites installed successfully."
-
+echo "===== BeforeInstall completed successfully ====="
